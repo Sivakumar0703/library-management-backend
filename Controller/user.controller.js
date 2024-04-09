@@ -332,7 +332,7 @@ export const forgotPassword = async(req,res) => {
     const createLink = generateLink(user.email);
     await User.findOneAndUpdate({email:user.email},{verification:(await createLink).verficationCode});
     const reset_link = `${process.env.CLIENT_ADDRESS}/reset_password/${(await createLink).verficationCode}/${(await createLink).token}`
-
+       console.log(reset_link)
     // sending reset link to user email id
     const context = `<html>
     <head>
@@ -367,6 +367,8 @@ export const forgotPassword = async(req,res) => {
     <p>Hi , ${user.userName} </p>
     <p>A request has been received to reset the password of your <u>CENTRAL LIBRARY</u> account <i>${user.email}</i> </p>
     <p id="texts">Click on the reset button to reset your password</p> &nbsp; <a target="_blank" href="${reset_link}" id="reset-btn"> reset </a>
+    <p>or</p>
+    <p>vist this link: ${reset_link}</p?
     <p>This link expires in 5 minutes</p>
     <p>Thank you!</p>
     </div>
