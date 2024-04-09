@@ -31,6 +31,10 @@ const userSchema = mongoose.Schema({
     isVerified:{
         type:Boolean,
         default:false 
+    },
+    verification:{
+        type : String,
+        default : null
     }
 },{timestamp:true})
 

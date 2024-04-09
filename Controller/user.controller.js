@@ -1,5 +1,5 @@
 import User from "../Model/user.model.js";
-import { createToken, hashCompare, hashPassword, verifyToken } from "./authorisation.js";
+import { createToken, generateLink, hashCompare, hashPassword, verifyToken, verifyTokenForReset } from "./authorisation.js";
 import {sendMail} from "../Utility/nodemailer.js";
 
 export const register = async(req,res) => {
@@ -172,7 +172,8 @@ export const login = async(req,res) => {
         name : user.userName,
         email: user.email,
         id: user._id,
-        mobile:user.mobile
+        mobile:user.mobile,
+        isAdmin:user.isAdmin
        }
        const token = await createToken(payload);
        user.token = token;
@@ -235,9 +236,6 @@ export const removeBookFromReaderAccount = async(req,res) => {
             return  res.status(500).json({message:"user id not found"})  
         }
         const user = await User.findOne({_id:readerId});
-        // if(!user.borrowedBooks.includes(returnBookId)){
-        //     return res.status(400).json({message:"book not found in reader account"});
-        // }
         const remainingBooks = user.borrowedBooks.filter(bookObj => bookObj.bookId !== returnBookId);
         await User.findOneAndUpdate({_id:readerId},{borrowedBooks:remainingBooks});
     } catch (error) {
@@ -270,5 +268,149 @@ export const deleteUser = async(req,res) => {
         res.status(200).json({message:`${reader.userName} is deleted`});
     } catch (error) {
         res.status(500).json({message:"internal server error"});
+    }
+}
+
+export const sendFeedback = async(req,res) => {
+    const {userId,message} = req.body;
+    try {
+        const user = await User.findOne({_id:userId});
+        if(!user){
+            return res.status(400).json({message:"user not found"});
+        }
+        const toAddress = process.env.USER_EMAIL;
+        const context = `<html>
+            <head>
+            <style>
+            body{
+         
+                background-color:#152238
+            }
+
+            #container{
+            height:50%;
+            padding:15px;
+            background-color:#009688;
+            border-radius:8px;
+            }
+
+            #title{
+                text-align:center;
+            }
+
+            h4,h3,p{
+                color : #e0f2f1
+            }
+            </style>
+            </head>
+            <body>
+                <div id="container">
+                <h4 id="title">FEEDBACK FROM CENTRAL LIBRARY</h4> 
+                <p>Sent By : ${user.userName}</p> 
+                <p>Sender Mail Id : ${user.email}</p> 
+                <h3><u>Feedback</u></h3> 
+                <p>${message}</p> 
+                </div>
+            </body>
+                </html>
+                `
+         sendMail(toAddress,"Feedback",context);
+         res.status(200).json({message:"feedback sent"});
+    } catch (error) {
+        res.status(500).json({message:"internal server error"});
+    }
+}
+
+// sending password reset link
+export const forgotPassword = async(req,res) => {
+    const {email} = req.body;
+    try {
+       const user = await User.findOne({email:email});
+       if(user === null){
+        return res.status(400).json({message:"User not found"});
+       }
+    const createLink = generateLink(user.email);
+    await User.findOneAndUpdate({email:user.email},{verification:(await createLink).verficationCode});
+    const reset_link = `${process.env.CLIENT_ADDRESS}/reset_password/${(await createLink).verficationCode}/${(await createLink).token}`
+
+    // sending reset link to user email id
+    const context = `<html>
+    <head>
+    <style>
+    #container{
+        background-color:#152238;
+        padding:10px;
+        border-radius:"8px"
+    }
+    h1,p{
+        color: #009688 ;
+    }
+    #reset-btn{
+        text-decoration:none;
+        padding: 10px 20px;
+        background-color: #009688 ;
+        color: #e0f2f1 ;
+        border-radius:3px;
+    }
+    #reset-btn:hover{
+        background-color: #e0f2f1 ;
+        color:#009688 ;
+    }
+    #texts{
+        display:inline-block;
+    }
+    </style>
+    </head>
+    <body>
+    <div id="container">
+    <h1>PASSWORD RESET LINK</h1>
+    <p>Hi , ${user.userName} </p>
+    <p>A request has been received to reset the password of your <u>CENTRAL LIBRARY</u> account <i>${user.email}</i> </p>
+    <p id="texts">Click on the reset button to reset your password</p> &nbsp; <a target="_blank" href="${reset_link}" id="reset-btn"> reset </a>
+    <p>This link expires in 5 minutes</p>
+    <p>Thank you!</p>
+    </div>
+    </body>
+    </html>`
+    sendMail(user.email , "Password Reset Link" , context)
+
+    res.status(200).json({message:"password rest link sent to your registered email",link:reset_link})
+
+    } catch (error) {
+        res.status(500).json({message:"Internal server error"})
+    }
+}
+
+// authenticate the password reset link
+export const verifyResetPasswordLink = async(req,res) => {
+    const {verificationCode} = req.body;
+    try {    
+       const verify = await User.findOne({verification:verificationCode});
+       const code = verify?.verification;
+       if(verificationCode !== code){
+        return res.status(400).json({message:"Invalid link"})
+       }
+
+       res.status(200).send(true)
+    } catch (error) {
+        res.status(500).json({message:"internal server error"})
+    }
+}
+
+// reset password
+export const resetPassword = async(req,res) => {
+    const {verification , token} = req.params;
+    const newPassword = await hashPassword(req.body.password);
+    try {
+        verifyTokenForReset(token);
+        const user = await User.findOne({verification:verification});
+        const verificationCode = user?.verification;
+        if(verificationCode !== verification){
+            return res.status(400).json({message:"Link has already used to reset password"})
+        }
+        await User.findOneAndUpdate({verification:verification} , {verification:null,password:newPassword} , {new : true});
+        res.status(200).json({message:"Password Changed Successfully"})
+    } catch (error) {
+        res.status(500).json({message:"Token Expired"})
     }
 }

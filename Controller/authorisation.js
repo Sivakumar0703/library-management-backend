@@ -34,3 +34,15 @@ export const verifyToken = async(token) => {
     }
 }
 
+// generate password reset link
+export const generateLink = async(email) => {
+    const payload = {email:email}
+    const verification = Math.random().toString(36).substring(2,7);
+    const token = jwt.sign(payload , secretKey ,{expiresIn:"5m"})
+    return {token:token , verficationCode:verification}
+}
+
+// verify the token for password reset
+export const verifyTokenForReset = (token) => {
+    return jwt.verify(token,secretKey)
+}
